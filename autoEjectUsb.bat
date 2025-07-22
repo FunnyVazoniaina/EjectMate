@@ -1,24 +1,29 @@
 @echo off
-setlocal
+setlocal enabledelayedexpansion
 
-REM Parcourir tous les lecteurs amovibles
-for /f "tokens=1 delims==" %%D in ('wmic logicaldisk where "DriveType=2" get DeviceID /value ^| find "="') do (
+for /f "tokens=*" %%D in ('wmic logicaldisk where "DriveType=2" get DeviceID ^| find ":"') do (
     set "drive=%%D"
-    call :ejectDrive %%D
+    call :ejectDrive !drive!
 )
+
+pause
 goto :eof
 
 :ejectDrive
-powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+echo Tentative d'éjection : %1
+
+powershell -NoProfile -Command ^
+    "$ErrorActionPreference = 'Stop';" ^
     "$drive = '%1';" ^
-    "$vol = Get-WmiObject -Class Win32_Volume -Filter \"DriveLetter='$drive'\";" ^
-    "if ($vol) {" ^
-    "    $vol.Dismount($false, $false) | Out-Null;" ^
-    "    $vol.Remove($false) | Out-Null;" ^
-    "    Import-Module BurntToast;" ^
-    "    New-BurntToastNotification -Text 'USB Ejected', \"Drive $drive has been safely ejected.\";" ^
-    "} else {" ^
-    "    Import-Module BurntToast;" ^
-    "    New-BurntToastNotification -Text 'Ejection Failed', \"Drive $drive could not be found.\";" ^
+    "try {" ^
+    "  $shell = New-Object -ComObject Shell.Application;" ^
+    "  $shell.Namespace(17).ParseName($drive).InvokeVerb('Eject');" ^
+    "  Write-Host ('✅ Ejection réussie : ' + $drive) -ForegroundColor Green;" ^
+    "  Import-Module BurntToast;" ^
+    "  New-BurntToastNotification -Text 'USB Ejected', ('Drive ' + $drive + ' has been safely removed.')" ^
+    "} catch {" ^
+    "  Write-Host ('❌ Erreur : ' + $_.Exception.Message) -ForegroundColor Red;" ^
+    "  Import-Module BurntToast;" ^
+    "  New-BurntToastNotification -Text 'Ejection Failed', $_.Exception.Message" ^
     "}"
 goto :eof
